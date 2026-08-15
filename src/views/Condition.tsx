@@ -147,6 +147,13 @@ export const Condition = mobxReact.observer(() => {
           placement="bottom-start"
         />
       )}
+      {editing && (
+        <Button
+          className="condition_button"
+          onClick={store.resetCurrentList}
+          children="重置"
+        />
+      )}
       <span className="condition_right">
         {editing && (
           <Dropdown

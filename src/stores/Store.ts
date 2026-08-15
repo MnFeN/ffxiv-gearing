@@ -898,6 +898,21 @@ export const Store = mst.types
         }
       }
     },
+    resetCurrentList(): void {
+      self.gearOptimizationRunner?.cancel();
+      self.gearOptimizationRunner = undefined;
+      self.gearOptimizationStatus = { status: 'idle' };
+
+      self.equippedGears.clear();
+
+      for (const gear of self.gears.values()) {
+        if (gear.isFood || self.excludedGearIds.has(Math.abs(gear.id) as G.GearId)) continue;
+
+        for (const materia of gear.materias) {
+          materia.meld(undefined);
+        }
+      }
+    },
     equip(gear: IGearUnion): void {
       const key = gear.slot.toString();
 
