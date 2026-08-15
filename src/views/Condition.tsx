@@ -77,6 +77,13 @@ export const Condition = mobxReact.observer(() => {
             />
           </span>
           品级
+          <span
+            className="condition_level-tip"
+            aria-label="格式如：“720-735, 790, 795”"
+            role="tooltip"
+            data-tooltip-position="bottom"
+            children={<Icon name="help" />}
+          />
         </span>
       )}
       {editing && (
