@@ -72,7 +72,7 @@ export const Condition = mobxReact.observer(() => {
         <span className="condition_level">
           <span className="condition_level-value">
             <ConditionLevelRangeInput
-              value={store.levelRangeText || `${store.minLevel}-${store.maxLevel}`}
+              value={store.pendingLevelRangeText ?? store.levelRangeText}
               onChange={value => store.setLevelRangeText(value)}
             />
           </span>

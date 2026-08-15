@@ -27,11 +27,7 @@ export const Store = mst.types
     mode: mst.types.optional(mst.types.string as mst.ISimpleType<Mode>, 'edit'),
     job: mst.types.maybe(mst.types.string as mst.ISimpleType<G.Job>),
     jobLevel: mst.types.optional(mst.types.number as mst.ISimpleType<G.JobLevel>, 100),
-    minLevel: mst.types.optional(mst.types.number, 0),
-    maxLevel: mst.types.optional(mst.types.number, 0),
     levelRangeText: mst.types.optional(mst.types.string, ''),
-    minLevelIncoming: mst.types.maybe(mst.types.number),
-    maxLevelIncoming: mst.types.maybe(mst.types.number),
     syncLevel: mst.types.maybe(mst.types.number),
     filterFocus: mst.types.optional(mst.types.string as mst.ISimpleType<FilterFocus>, 'no'),
     showAllMaterias: mst.types.optional(mst.types.boolean, false),
@@ -48,6 +44,7 @@ export const Store = mst.types
     tiersShown: localStorage.getItem(tiersShownStorageKey) === 'true',
     materiaOverallActiveTab: 0,
     autoSelectScheduled: false,
+    pendingLevelRangeText: undefined as string | undefined,
     excludedGearIds: mobx.observable.set<G.GearId>(),
     gearOptimizationStatus: { status: 'idle' } as GearOptimizationStatus,
     gearOptimizationRunner: undefined as GearOptimizationRunner | undefined,
@@ -57,7 +54,8 @@ export const Store = mst.types
       console.debug('filteredIds');
       if (self.job === undefined) return [];
       if (self.mode === 'view') {
-        return Array.from(self.gears.keys(), id => Number(id) as G.GearId);
+        return Array.from(self.gears.keys(), id => Number(id) as G.GearId)
+          .filter(id => !self.excludedGearIds.has(Math.abs(id) as G.GearId));
       }
 
       const levelRanges = parseLevelRanges(self.levelRangeText);
@@ -67,11 +65,10 @@ export const Store = mst.types
       for (const gear of gearDataOrdered.get()) {
         if (self.excludedGearIds.has(gear.id)) continue;
 
-        const { job, minLevel, maxLevel } = self;
+        const { job } = self;
 
-        const levelMatched = levelRanges !== undefined
-          ? levelRanges.some(([min, max]) => gear.level >= min && gear.level <= max)
-          : gear.level >= minLevel && gear.level <= maxLevel;
+        const levelMatched = levelRanges !== undefined &&
+          levelRanges.some(([min, max]) => gear.level >= min && gear.level <= max);
 
         if (
           G.jobCategories[gear.jobCategory][job!] &&
@@ -101,7 +98,7 @@ export const Store = mst.types
   .views(self => ({
     get loadingStatus() {
       return gearDataLoading.get()
-        ? self.minLevelIncoming !== undefined || self.maxLevelIncoming !== undefined
+        ? self.pendingLevelRangeText !== undefined
           ? 'appending'
           : 'loading'
         : 'ready';
@@ -722,6 +719,7 @@ export const Store = mst.types
       self.mode = mode;
     },
     setJob(job: G.Job): void {
+      self.pendingLevelRangeText = undefined;
       self.excludedGearIds.clear();
 
       const oldSchema = self.job && G.jobSchemas[self.job];
@@ -734,11 +732,7 @@ export const Store = mst.types
       }
 
       if (newSchema.defaultItemLevel !== oldSchema?.defaultItemLevel) {
-        self.minLevel = newSchema.defaultItemLevel[0];
-        self.maxLevel = newSchema.defaultItemLevel[1];
-        self.levelRangeText = `${self.minLevel}-${self.maxLevel}`;
-        self.minLevelIncoming = undefined;
-        self.maxLevelIncoming = undefined;
+        self.levelRangeText = `${newSchema.defaultItemLevel[0]}-${newSchema.defaultItemLevel[1]}`;
       }
 
       for (const [key, gear] of self.equippedGears.entries()) {
@@ -749,44 +743,31 @@ export const Store = mst.types
 
       self.autoSelectScheduled = newSchema.skeletonGears ?? false;
     },
-    setMinLevel(level: number): void {
-      self.excludedGearIds.clear();
-      self.levelRangeText = '';
-      self.minLevelIncoming = level;
-    },
-    setMaxLevel(level: number): void {
-      self.excludedGearIds.clear();
-      self.levelRangeText = '';
-      self.maxLevelIncoming = level;
-    },
     setLevelRangeText(value: string): boolean {
       const ranges = parseLevelRanges(value);
       if (ranges === undefined) return false;
 
-      self.excludedGearIds.clear();
-      self.levelRangeText = value;
+      if (value === self.pendingLevelRangeText) return true;
+      if (value === self.levelRangeText && self.pendingLevelRangeText === undefined) return true;
 
-      self.minLevelIncoming = Math.min(...ranges.map(range => range[0]));
-      self.maxLevelIncoming = Math.max(...ranges.map(range => range[1]));
+      self.excludedGearIds.clear();
+      self.pendingLevelRangeText = value;
 
       return true;
     },
-    submitIncomingLevels(): void {
-      if (self.minLevelIncoming !== undefined) {
-        self.minLevel = self.minLevelIncoming;
-        self.minLevelIncoming = undefined;
-      }
+    submitPendingLevelRange(): void {
+      if (self.pendingLevelRangeText === undefined) return;
 
-      if (self.maxLevelIncoming !== undefined) {
-        self.maxLevel = self.maxLevelIncoming;
-        self.maxLevelIncoming = undefined;
-      }
+      self.levelRangeText = self.pendingLevelRangeText;
+      self.pendingLevelRangeText = undefined;
     },
     setSyncLevel(level: number | undefined, jobLevel: G.JobLevel | undefined): void {
       self.syncLevel = level;
       self.jobLevel = jobLevel ?? self.schema.jobLevel;
     },
     setFilterFocus(filterFocus: FilterFocus) {
+      if (self.filterFocus === filterFocus) return;
+
       self.excludedGearIds.clear();
       self.filterFocus = filterFocus;
     },
@@ -888,6 +869,8 @@ export const Store = mst.types
     },
     startEditing(): void {
       self.mode = 'edit';
+      self.pendingLevelRangeText = undefined;
+      self.excludedGearIds.clear();
 
       let minLevel = Infinity;
       let maxLevel = -Infinity;
@@ -901,14 +884,9 @@ export const Store = mst.types
         }
       }
 
-      self.minLevel = minLevel;
-      self.maxLevel = maxLevel;
       self.levelRangeText = minLevel === maxLevel
         ? minLevel.toString()
         : `${minLevel}-${maxLevel}`;
-
-      self.minLevelIncoming = undefined;
-      self.maxLevelIncoming = undefined;
     },
     removeGearFromCurrentList(gearId: G.GearId): void {
       const id = Math.abs(gearId) as G.GearId;
@@ -968,22 +946,26 @@ export const Store = mst.types
   }))
   .actions(self => ({
     afterCreate(): void {
+      if (self.job !== undefined && parseLevelRanges(self.levelRangeText) === undefined) {
+        self.levelRangeText = `${self.schema.defaultItemLevel[0]}-${self.schema.defaultItemLevel[1]}`;
+      }
+
       for (const gearId of Object.values(self.equippedGears.toJSON())) {
         loadGearDataOfGearId(Math.abs(gearId as G.GearId));
       }
 
-      self.submitIncomingLevels();
+      mobx.autorun(() => {
+        const ranges = parseLevelRanges(self.pendingLevelRangeText ?? self.levelRangeText);
+        if (ranges === undefined) return;
 
-      mobx.autorun(() => loadGearDataOfLevelRange(self.minLevel, self.maxLevel));
+        for (const [min, max] of ranges) {
+          loadGearDataOfLevelRange(min, max);
+        }
+      });
 
       mobx.autorun(() => {
-        if (self.minLevelIncoming !== undefined || self.maxLevelIncoming !== undefined) {
-          loadGearDataOfLevelRange(
-            self.minLevelIncoming ?? self.minLevel,
-            self.maxLevelIncoming ?? self.maxLevel,
-          );
-
-          mobx.when(() => !gearDataLoading.get(), self.submitIncomingLevels);
+        if (self.pendingLevelRangeText !== undefined && !gearDataLoading.get()) {
+          self.submitPendingLevelRange();
         }
       });
 
