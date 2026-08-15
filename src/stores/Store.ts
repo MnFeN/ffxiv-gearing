@@ -48,6 +48,7 @@ export const Store = mst.types
     tiersShown: localStorage.getItem(tiersShownStorageKey) === 'true',
     materiaOverallActiveTab: 0,
     autoSelectScheduled: false,
+    excludedGearIds: mobx.observable.set<G.GearId>(),
     gearOptimizationStatus: { status: 'idle' } as GearOptimizationStatus,
     gearOptimizationRunner: undefined as GearOptimizationRunner | undefined,
   }))
@@ -64,6 +65,8 @@ export const Store = mst.types
       const ret: G.GearId[] = [];
 
       for (const gear of gearDataOrdered.get()) {
+        if (self.excludedGearIds.has(gear.id)) continue;
+
         const { job, minLevel, maxLevel } = self;
 
         const levelMatched = levelRanges !== undefined
@@ -719,6 +722,8 @@ export const Store = mst.types
       self.mode = mode;
     },
     setJob(job: G.Job): void {
+      self.excludedGearIds.clear();
+
       const oldSchema = self.job && G.jobSchemas[self.job];
       const newSchema = G.jobSchemas[job];
       self.job = job;
@@ -745,10 +750,12 @@ export const Store = mst.types
       self.autoSelectScheduled = newSchema.skeletonGears ?? false;
     },
     setMinLevel(level: number): void {
+      self.excludedGearIds.clear();
       self.levelRangeText = '';
       self.minLevelIncoming = level;
     },
     setMaxLevel(level: number): void {
+      self.excludedGearIds.clear();
       self.levelRangeText = '';
       self.maxLevelIncoming = level;
     },
@@ -756,6 +763,7 @@ export const Store = mst.types
       const ranges = parseLevelRanges(value);
       if (ranges === undefined) return false;
 
+      self.excludedGearIds.clear();
       self.levelRangeText = value;
 
       self.minLevelIncoming = Math.min(...ranges.map(range => range[0]));
@@ -779,6 +787,7 @@ export const Store = mst.types
       self.jobLevel = jobLevel ?? self.schema.jobLevel;
     },
     setFilterFocus(filterFocus: FilterFocus) {
+      self.excludedGearIds.clear();
       self.filterFocus = filterFocus;
     },
     setMateriaOverallActiveTab(activeTab: number) {
@@ -802,9 +811,11 @@ export const Store = mst.types
       self.showAllMaterias = !self.showAllMaterias;
     },
     toggleShowAllFoods(): void {
+      self.excludedGearIds.clear();
       self.showAllFoods = !self.showAllFoods;
     },
     toggleShowAllPotions(): void {
+      self.excludedGearIds.clear();
       self.showAllPotions = !self.showAllPotions;
     },
     toggleDuplicateToolMateria(): void {
@@ -898,6 +909,16 @@ export const Store = mst.types
 
       self.minLevelIncoming = undefined;
       self.maxLevelIncoming = undefined;
+    },
+    removeGearFromCurrentList(gearId: G.GearId): void {
+      const id = Math.abs(gearId) as G.GearId;
+      self.excludedGearIds.add(id);
+
+      for (const [key, gear] of self.equippedGears.entries()) {
+        if (gear !== undefined && Math.abs(gear.id) === id) {
+          self.equippedGears.delete(key);
+        }
+      }
     },
     equip(gear: IGearUnion): void {
       const key = gear.slot.toString();
@@ -1024,7 +1045,11 @@ function buildGearOptimizationInput(store: IStore): GearOptimizationInput {
   const foodCandidates = equippedFood?.isFood
     ? [buildOptimizerFoodInput(equippedFood, true)]
     : Array.from(store.gears.values())
-      .filter((gear): gear is IFood => gear.isFood && gear.slot === -1 && 'best' in gear.data)
+      .filter((gear): gear is IFood =>
+        gear.isFood &&
+        gear.slot === -1 &&
+        'best' in gear.data &&
+        !store.excludedGearIds.has(Math.abs(gear.id) as G.GearId))
       .map(food => buildOptimizerFoodInput(food, false));
 
   return {
