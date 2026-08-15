@@ -1,5 +1,4 @@
 import * as React from 'react';
-import * as mobx from 'mobx';
 import * as mobxReact from 'mobx-react-lite';
 import classNames from 'clsx';
 import { Button } from './@rmwc/button';
@@ -72,14 +71,9 @@ export const Condition = mobxReact.observer(() => {
       {editing && (
         <span className="condition_level">
           <span className="condition_level-value">
-            <ConditionLevelInput
-              value={store.minLevel}
-              onChange={value => store.setMinLevel(value)}
-            />
-            <span className="condition_level-separator">-</span>
-            <ConditionLevelInput
-              value={store.maxLevel}
-              onChange={value => store.setMaxLevel(value)}
+            <ConditionLevelRangeInput
+              value={store.levelRangeText || `${store.minLevel}-${store.maxLevel}`}
+              onChange={value => store.setLevelRangeText(value)}
             />
           </span>
           品级
@@ -206,68 +200,40 @@ export const Condition = mobxReact.observer(() => {
   );
 });
 
-const ConditionLevelInput = (() => {
-  let anyInstanceFocused = false;
-  let delayedChange: Function | null = null;
-  return mobxReact.observer<{
-    value: number,
-    onChange: (value: number) => void,
-  }>(({ value, onChange }) => {
-    const [ inputValue, setInputValue ] = React.useState(value.toString());
-    const [ prevValue, setPrevValue ] = React.useState(value);
-    if (value !== prevValue) {
-      setInputValue(value.toString());
-      setPrevValue(value);
+const ConditionLevelRangeInput = mobxReact.observer<{
+  value: string,
+  onChange: (value: string) => boolean,
+}>(({ value, onChange }) => {
+  const [inputValue, setInputValue] = React.useState(value);
+  const [prevValue, setPrevValue] = React.useState(value);
+
+  if (value !== prevValue) {
+    setInputValue(value);
+    setPrevValue(value);
+  }
+
+  const commit = () => {
+    if (!onChange(inputValue)) {
+      setInputValue(value);
     }
-    const inputRef = React.useRef<HTMLInputElement>(null);
-    React.useEffect(() => {
-      const handleWheel = (e: WheelEvent) => {
-        e.preventDefault();
-        if (e.deltaY !== 0) {
-          (e.target as HTMLInputElement).focus();
-          const delta = e.deltaY < 0 ? 5 : -5;
-          setInputValue(v => (parseInt(v, 10) + delta).toString());
+  };
+
+  return (
+    <TextField
+      className="condition_level-input mdc-text-field--compact"
+      type="text"
+      value={inputValue}
+      placeholder="730-735, 755, 775-800"
+      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+        setInputValue(e.target.value);
+      }}
+      onFocus={e => e.target.select()}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          (e.target as HTMLInputElement).blur();
         }
-      };
-      const input = inputRef.current!;
-      input.addEventListener('wheel', handleWheel, { passive: false });
-      return () => input.removeEventListener('wheel', handleWheel);
-    }, []);
-    const handleChange = () => onChange(parseInt(inputValue, 10) || 0);
-    return (
-      <TextField
-        inputRef={inputRef}
-        className="condition_level-input mdc-text-field--compact"
-        type="number"
-        step="5"
-        value={inputValue}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-          setInputValue(e.target.value);
-        }}
-        onFocus={e => {
-          e.target.select();
-          anyInstanceFocused = true;
-        }}
-        onBlur={() => {
-          setTimeout(() => {
-            if (!anyInstanceFocused) {
-              mobx.runInAction(() => {
-                delayedChange?.();
-                delayedChange = null;
-                handleChange();
-              });
-            } else {
-              delayedChange = handleChange;
-            }
-          }, 0);
-          anyInstanceFocused = false;
-        }}
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
-      />
-    );
-  });
-})();
+      }}
+    />
+  );
+});

@@ -55,20 +55,9 @@
   margin-right: 2px;
 }
 .condition_level-input {
-  width: 36px;
-  .mdc-text-field__input {
-    -moz-appearance: textfield;
-    &::-webkit-outer-spin-button,
-    &::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-  }
+  width: 180px;
+}
 
-}
-.condition_level-separator {
-  margin: 0 4px;
-}
 .condition_button {
   height: 34px;
   min-width: 48px;
@@ -85,10 +74,10 @@
 }
 .condition_filter {
   margin-left: 6px;
-  margin-right: 6px;  // text to divider 16px
+  margin-right: 6px; // text to divider 16px
 }
 .condition_setting {
-  margin-right: 6px;  // text to divider 16px
+  margin-right: 6px; // text to divider 16px
 }
 
 .condition_level-sync-icon {
